@@ -6,8 +6,15 @@ import (
 	"github.com/cloudflare/circl/dh/x448"
 	"github.com/cloudflare/circl/kem/mlkem/mlkem768"
 	"github.com/cloudflare/circl/sign/ed448"
+	"github.com/mr-tron/base58/base58"
 	"github.com/slipe-fun/skid-v3/internal/crypto"
 )
+
+func GenerateUserID(ecdhPK []byte, mlkemPK []byte) string {
+	truncatedHash := crypto.HashPublicKeys(ecdhPK, mlkemPK)
+
+	return base58.Encode(truncatedHash)
+}
 
 func GenerateIdentity() (user *User, secret *SecretKeys, err error) {
 	var mlKem768Secret, x448Secret, ed448Secret []byte
@@ -39,6 +46,7 @@ func GenerateIdentity() (user *User, secret *SecretKeys, err error) {
 	}
 
 	user = &User{
+		ID: GenerateUserID(x448Public, ed448Public),
 		PublicKeys: PublicKeys{
 			MlKem768: mlKem768Public,
 			X448:     x448Public,

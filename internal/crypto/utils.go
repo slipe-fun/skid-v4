@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"runtime"
+
+	"golang.org/x/crypto/blake2b"
 )
 
 func ConcatBytes(fields ...[]byte) []byte {
@@ -37,4 +39,13 @@ func Zero(b []byte) {
 		b[i] = 0
 	}
 	runtime.KeepAlive(b)
+}
+
+func HashPublicKeys(ecdhPK, mlkemPK []byte) []byte {
+	combined := make([]byte, len(ecdhPK)+len(mlkemPK))
+	copy(combined, ecdhPK)
+	copy(combined[len(ecdhPK):], mlkemPK)
+
+	hash := blake2b.Sum256(combined)
+	return hash[:10]
 }

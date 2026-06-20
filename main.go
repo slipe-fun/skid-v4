@@ -14,10 +14,8 @@ func main() {
 	}
 	defer secretA.Wipe()
 
-	userID := "8MNQQ2ky6YVTCT"
-
 	restoredUser := identity.User{
-		ID: userID,
+		ID: identity.GenerateUserID(userA.PublicKeys.X448, userA.PublicKeys.MlKem768),
 		PublicKeys: identity.PublicKeys{
 			MlKem768: userA.PublicKeys.MlKem768,
 			X448:     userA.PublicKeys.X448,
@@ -38,12 +36,17 @@ func main() {
 	}
 	defer secretB.Wipe()
 
+	userAPrefix := fmt.Sprintf("[User %s]", userA.ID)
+	userBPrefix := fmt.Sprintf("[User %s]", userB.ID)
+	_ = userBPrefix
+
 	handshakePayload, chatKey, err := identity.InitiateKeyExchange(userA, secretA, userB)
 	if err != nil {
 		panic(err)
 	}
 	_ = handshakePayload
 
-	fmt.Println(hex.EncodeToString(chatKey))
-	fmt.Println("everything works")
+	fmt.Println(userAPrefix, "Hanshake initialized!")
+	fmt.Println(userAPrefix, "Chat key:", hex.EncodeToString(chatKey))
+	fmt.Println("everything works!!!")
 }
