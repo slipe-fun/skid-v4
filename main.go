@@ -38,15 +38,35 @@ func main() {
 
 	userAPrefix := fmt.Sprintf("[User %s]", userA.ID)
 	userBPrefix := fmt.Sprintf("[User %s]", userB.ID)
-	_ = userBPrefix
 
-	handshakePayload, chatKey, err := identity.InitiateKeyExchange(userA, secretA, userB)
+	fmt.Println(userAPrefix, "Initializing handshake with", userB.ID)
+	handshakePayload, initializedChatKey, err := identity.InitiateKeyExchange(userA, secretA, userB)
 	if err != nil {
 		panic(err)
 	}
-	_ = handshakePayload
 
 	fmt.Println(userAPrefix, "Hanshake initialized!")
-	fmt.Println(userAPrefix, "Chat key:", hex.EncodeToString(chatKey))
-	fmt.Println("everything works!!!")
+	fmt.Println(userAPrefix, "Chat key:", hex.EncodeToString(initializedChatKey))
+
+	fmt.Println()
+
+	fmt.Println(userAPrefix, "Self-finalizing handshake...")
+	syncedChatKey, err := identity.FinalizeKeyExchange(handshakePayload, userA, secretA, userB, nil, true)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(userAPrefix, "Hanshake finalized!")
+	fmt.Println(userAPrefix, "Chat key:", hex.EncodeToString(syncedChatKey))
+
+	fmt.Println()
+
+	fmt.Println(userBPrefix, "Finalizing handshake with", userA.ID)
+	receiverChatKey, err := identity.FinalizeKeyExchange(handshakePayload, userA, nil, userB, secretB, false)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(userBPrefix, "Hanshake finalized!")
+	fmt.Println(userBPrefix, "Chat key:", hex.EncodeToString(receiverChatKey))
+
+	fmt.Println("\neverything works!!!")
 }
