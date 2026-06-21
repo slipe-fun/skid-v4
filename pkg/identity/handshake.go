@@ -13,9 +13,9 @@ type EncryptedSyncKey struct {
 }
 
 type HandshakePayload struct {
-	ReceiverCiphertext []byte `json:"receiver_ciphertext"`
-	SenderCiphertext   []byte `json:"sender_ciphertext"`
-	EncryptedSyncKey   EncryptedSyncKey
+	ReceiverCiphertext  []byte `json:"receiver_ciphertext"`
+	SenderEphemeralX448 []byte `json:"sender_ephemeral_x448"`
+	EncryptedSyncKey    EncryptedSyncKey
 }
 
 func InitiateKeyExchange(sender *User, senderSecretKeys *SecretKeys, receiver *User) (*HandshakePayload, []byte, []byte, error) {
@@ -27,8 +27,8 @@ func InitiateKeyExchange(sender *User, senderSecretKeys *SecretKeys, receiver *U
 	}
 
 	var (
-		senderMlKemCiphertext     []byte
-		senderMlKemSharedSecret   []byte
+		ephemeralX448Public       []byte
+		ephemeralX448Secret       []byte
 		receiverMlKemCiphertext   []byte
 		receiverMlKemSharedSecret []byte
 		ecdhSharedSecret          []byte
@@ -45,9 +45,9 @@ func InitiateKeyExchange(sender *User, senderSecretKeys *SecretKeys, receiver *U
 	)
 
 	defer func() {
-		crypto.Zero(senderMlKemSharedSecret)
 		crypto.Zero(receiverMlKemSharedSecret)
 		crypto.Zero(ecdhSharedSecret)
+		crypto.Zero(ephemeralX448Secret)
 
 		crypto.Zero(syncMSK)
 		crypto.Zero(temp)
@@ -56,7 +56,7 @@ func InitiateKeyExchange(sender *User, senderSecretKeys *SecretKeys, receiver *U
 		crypto.Zero(rootKey)
 	}()
 
-	senderMlKemCiphertext, senderMlKemSharedSecret, err = crypto.EncapsulateMLKEM(sender.PublicKeys.MlKem768)
+	ephemeralX448Public, ephemeralX448Secret, err = crypto.GenerateECDHKeyPair()
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -66,7 +66,12 @@ func InitiateKeyExchange(sender *User, senderSecretKeys *SecretKeys, receiver *U
 		return nil, nil, nil, err
 	}
 
-	ecdhSharedSecret, err = crypto.DeriveECDHSharedSecret(senderSecretKeys.X448, receiver.PublicKeys.X448)
+	ecdhSharedSecret, err = crypto.DeriveECDHSharedSecret(ephemeralX448Secret, receiver.PublicKeys.X448)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	staticStaticECDHSharedSecret, err := crypto.DeriveECDHSharedSecret(senderSecretKeys.X448, receiver.PublicKeys.X448)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -78,7 +83,7 @@ func InitiateKeyExchange(sender *User, senderSecretKeys *SecretKeys, receiver *U
 		receiver.PublicKeys.X448,
 		sender.PublicKeys.MlKem768,
 		receiver.PublicKeys.MlKem768,
-		senderMlKemCiphertext,
+		ephemeralX448Public,
 		receiverMlKemCiphertext,
 	)
 
@@ -103,16 +108,15 @@ func InitiateKeyExchange(sender *User, senderSecretKeys *SecretKeys, receiver *U
 		sessionID[:],
 		[]byte(sender.ID),
 		[]byte(receiver.ID),
-		senderMlKemCiphertext,
 		receiverMlKemCiphertext,
 	)
 
-	syncKeyCiphertext, syncKeyNonce, err = crypto.Encrypt(syncKey, receiverMlKemSharedSecret, syncAAD)
+	material = crypto.ConcatBytes(receiverMlKemSharedSecret, ecdhSharedSecret, staticStaticECDHSharedSecret)
+
+	syncKeyCiphertext, syncKeyNonce, err = crypto.Encrypt(syncKey, material, syncAAD)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-
-	material = crypto.ConcatBytes(receiverMlKemSharedSecret, ecdhSharedSecret)
 
 	rootKey, err = crypto.HKDF(material, sessionID[:], "skid:v3:root_key", 32)
 	if err != nil {
@@ -125,8 +129,8 @@ func InitiateKeyExchange(sender *User, senderSecretKeys *SecretKeys, receiver *U
 	}
 
 	return &HandshakePayload{
-		SenderCiphertext:   senderMlKemCiphertext,
-		ReceiverCiphertext: receiverMlKemCiphertext,
+		ReceiverCiphertext:  receiverMlKemCiphertext,
+		SenderEphemeralX448: ephemeralX448Public,
 		EncryptedSyncKey: EncryptedSyncKey{
 			Ciphertext: syncKeyCiphertext,
 			Nonce:      syncKeyNonce,
@@ -183,18 +187,13 @@ func FinalizeKeyExchange(payload *HandshakePayload, sender *User, senderSecretKe
 		receiver.PublicKeys.X448,
 		sender.PublicKeys.MlKem768,
 		receiver.PublicKeys.MlKem768,
-		payload.SenderCiphertext,
+		payload.SenderEphemeralX448,
 		payload.ReceiverCiphertext,
 	)
 
 	sessionID := sha256.Sum256(contextData)
 
 	if isSelf {
-		ecdhSharedSecret, err = crypto.DeriveECDHSharedSecret(senderSecretKeys.X448, receiver.PublicKeys.X448)
-		if err != nil {
-			return nil, nil, err
-		}
-
 		temp, err = crypto.HKDF(senderSecretKeys.X448, sessionID[:], "skid:v3:sync_step1", 32)
 		if err != nil {
 			return nil, nil, err
@@ -214,23 +213,30 @@ func FinalizeKeyExchange(payload *HandshakePayload, sender *User, senderSecretKe
 			sessionID[:],
 			[]byte(sender.ID),
 			[]byte(receiver.ID),
-			payload.SenderCiphertext,
 			payload.ReceiverCiphertext,
 		)
 
-		receiverMlKemSharedSecret, err = crypto.Decrypt(syncKey, payload.EncryptedSyncKey.Ciphertext, payload.EncryptedSyncKey.Nonce, syncAAD)
+		material, err = crypto.Decrypt(syncKey, payload.EncryptedSyncKey.Ciphertext, payload.EncryptedSyncKey.Nonce, syncAAD)
 		if err != nil {
 			return nil, nil, err
 		}
 	} else {
-		ecdhSharedSecret, err = crypto.DeriveECDHSharedSecret(receiverSecretKeys.X448, sender.PublicKeys.X448)
+		ecdhSharedSecret, err = crypto.DeriveECDHSharedSecret(receiverSecretKeys.X448, payload.SenderEphemeralX448)
 		if err != nil {
 			return nil, nil, err
 		}
+
+		staticStaticECDHSharedSecret, err := crypto.DeriveECDHSharedSecret(receiverSecretKeys.X448, sender.PublicKeys.X448)
+		if err != nil {
+			return nil, nil, err
+		}
+
 		receiverMlKemSharedSecret, err = crypto.DecapsulateMLKEM(receiverSecretKeys.MlKem768, payload.ReceiverCiphertext)
 		if err != nil {
 			return nil, nil, err
 		}
+
+		material = crypto.ConcatBytes(receiverMlKemSharedSecret, ecdhSharedSecret, staticStaticECDHSharedSecret)
 
 		temp, err = crypto.HKDF(receiverSecretKeys.X448, sessionID[:], "skid:v3:sync_step1", 32)
 		if err != nil {
@@ -247,8 +253,6 @@ func FinalizeKeyExchange(payload *HandshakePayload, sender *User, senderSecretKe
 			return nil, nil, err
 		}
 	}
-
-	material = crypto.ConcatBytes(receiverMlKemSharedSecret, ecdhSharedSecret)
 
 	rootKey, err = crypto.HKDF(material, sessionID[:], "skid:v3:root_key", 32)
 	if err != nil {
