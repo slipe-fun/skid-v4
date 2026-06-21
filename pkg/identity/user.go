@@ -8,6 +8,7 @@ import (
 	"github.com/cloudflare/circl/sign/ed448"
 	"github.com/mr-tron/base58/base58"
 	"github.com/slipe-fun/skid-v3/internal/crypto"
+	"github.com/vmihailenco/msgpack/v5"
 )
 
 type PublicKeys struct {
@@ -20,6 +21,13 @@ type SecretKeys struct {
 	MlKem768 []byte
 	X448     []byte
 	Ed448    []byte
+}
+
+type EncryptedSecretKeys struct {
+	Ciphertext []byte `json:"ciphertext"`
+	Nonce      []byte `json:"nonce"`
+	Salt       []byte `json:"salt"`
+	Signature  []byte `json:"signature"`
 }
 
 type User struct {
@@ -35,6 +43,16 @@ func (s *SecretKeys) Wipe() {
 	crypto.Zero(s.MlKem768)
 	crypto.Zero(s.X448)
 	crypto.Zero(s.Ed448)
+}
+
+func (s *SecretKeys) Pack() ([]byte, error) {
+	return msgpack.Marshal(s)
+}
+
+func Unpack(packed []byte) (*SecretKeys, error) {
+	var s SecretKeys
+	err := msgpack.Unmarshal(packed, &s)
+	return &s, err
 }
 
 func GenerateUserID(ecdhPK []byte, mlkemPK []byte) string {
@@ -73,7 +91,7 @@ func GenerateIdentity() (user *User, secret *SecretKeys, err error) {
 	}
 
 	user = &User{
-		ID: GenerateUserID(x448Public, ed448Public),
+		ID: GenerateUserID(x448Public, mlKem768Public),
 		PublicKeys: PublicKeys{
 			MlKem768: mlKem768Public,
 			X448:     x448Public,
@@ -127,4 +145,119 @@ func NewSecretKeys(kem, ecdh, ed []byte) (secret *SecretKeys, err error) {
 	}
 
 	return secret, nil
+}
+
+func Encrypt(user *User, userSecretKeys *SecretKeys, masterKey []byte) (*EncryptedSecretKeys, error) {
+	var (
+		packedSecretKeys []byte
+		derivedKey       []byte
+		err              error
+	)
+
+	defer func() {
+		crypto.Zero(packedSecretKeys)
+		crypto.Zero(derivedKey)
+	}()
+
+	packedSecretKeys, err = userSecretKeys.Pack()
+	if err != nil {
+		return nil, err
+	}
+
+	salt, err := crypto.RandomBytes(32)
+	if err != nil {
+		return nil, err
+	}
+
+	derivedKey, err = crypto.HKDF(masterKey, salt, "skid:v3:master_key", 32)
+	if err != nil {
+		return nil, err
+	}
+
+	secretKeysAAD := crypto.BuildAAD("secret_keys",
+		user.PublicKeys.MlKem768,
+		user.PublicKeys.X448,
+		user.PublicKeys.Ed448,
+	)
+
+	ciphertext, nonce, err := crypto.Encrypt(derivedKey, packedSecretKeys, secretKeysAAD)
+	if err != nil {
+		return nil, err
+	}
+
+	messageToSign := crypto.ConcatBytes(
+		ciphertext,
+		nonce,
+		salt,
+		user.PublicKeys.MlKem768,
+		user.PublicKeys.X448,
+		user.PublicKeys.Ed448,
+	)
+
+	signature, err := crypto.SignEd448(userSecretKeys.Ed448, messageToSign, "")
+	if err != nil {
+		return nil, err
+	}
+
+	return &EncryptedSecretKeys{
+		Ciphertext: ciphertext,
+		Nonce:      nonce,
+		Salt:       salt,
+		Signature:  signature,
+	}, nil
+}
+
+func Decrypt(encryptedSecretKeys *EncryptedSecretKeys, user *User, masterKey []byte) (*SecretKeys, error) {
+	var (
+		derivedKey       []byte
+		packedSecretKeys []byte
+		err              error
+	)
+
+	defer func() {
+		crypto.Zero(derivedKey)
+		crypto.Zero(packedSecretKeys)
+	}()
+
+	signedMessage := crypto.ConcatBytes(
+		encryptedSecretKeys.Ciphertext,
+		encryptedSecretKeys.Nonce,
+		encryptedSecretKeys.Salt,
+		user.PublicKeys.MlKem768,
+		user.PublicKeys.X448,
+		user.PublicKeys.Ed448,
+	)
+
+	var isSignatureValid bool
+	isSignatureValid, err = crypto.VerifyEd448(user.PublicKeys.Ed448, signedMessage, encryptedSecretKeys.Signature, "")
+	if err != nil {
+		return nil, err
+	}
+
+	if !isSignatureValid {
+		return nil, errors.New("invalid Ed448 signature")
+	}
+
+	derivedKey, err = crypto.HKDF(masterKey, encryptedSecretKeys.Salt, "skid:v3:master_key", 32)
+	if err != nil {
+		return nil, err
+	}
+
+	secretKeysAAD := crypto.BuildAAD("secret_keys",
+		user.PublicKeys.MlKem768,
+		user.PublicKeys.X448,
+		user.PublicKeys.Ed448,
+	)
+
+	packedSecretKeys, err = crypto.Decrypt(derivedKey, encryptedSecretKeys.Ciphertext, encryptedSecretKeys.Nonce, secretKeysAAD)
+	if err != nil {
+		return nil, err
+	}
+
+	unpackedSecretKeys, err := Unpack(packedSecretKeys)
+	if err != nil {
+		return nil, err
+	}
+
+	return unpackedSecretKeys, nil
 }

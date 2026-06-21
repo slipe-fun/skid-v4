@@ -6,6 +6,7 @@ import (
 
 	"github.com/slipe-fun/skid-v3/pkg/identity"
 	"github.com/slipe-fun/skid-v3/pkg/messages"
+	"github.com/tink-crypto/tink-go/v2/subtle/random"
 )
 
 func main() {
@@ -37,8 +38,38 @@ func main() {
 	}
 	defer secretB.Wipe()
 
+	userAMasterKey := random.GetRandomBytes(32)
+
 	userAPrefix := fmt.Sprintf("[User %s]", userA.ID)
 	userBPrefix := fmt.Sprintf("[User %s]", userB.ID)
+
+	fmt.Println(userAPrefix, "created")
+	fmt.Println(userBPrefix, "created")
+
+	fmt.Println()
+
+	fmt.Println(userAPrefix, "Encrypting it's secret keys...")
+	encryptedSecretKeys, err := identity.Encrypt(userA, secretA, userAMasterKey)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(userAPrefix, "Secret keys encrypted!")
+
+	fmt.Println()
+
+	fmt.Println(userAPrefix, "Decrypting secret keys...")
+	decryptedSecretKeys, err := identity.Decrypt(encryptedSecretKeys, userA, userAMasterKey)
+	if err != nil {
+		panic(err)
+	}
+	defer decryptedSecretKeys.Wipe()
+	fmt.Println(userAPrefix, "Secret keys decrypted!")
+
+	fmt.Println(userAPrefix, "Decrypted MlKem768 key lenth:", len(decryptedSecretKeys.MlKem768))
+	fmt.Println(userAPrefix, "Decrypted X448 key lenth:", len(decryptedSecretKeys.X448))
+	fmt.Println(userAPrefix, "Decrypted Ed448 key lenth:", len(decryptedSecretKeys.Ed448))
+
+	fmt.Println()
 
 	fmt.Println(userAPrefix, "Initializing handshake with", userB.ID)
 	handshakePayload, initializedChatKey, senderSyncKey, err := identity.InitiateKeyExchange(userA, secretA, userB)

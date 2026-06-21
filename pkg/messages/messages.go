@@ -3,11 +3,11 @@ package messages
 import (
 	"crypto/hmac"
 	"encoding/binary"
-	"encoding/json"
 	"time"
 
 	"github.com/slipe-fun/skid-v3/internal/crypto"
 	"github.com/slipe-fun/skid-v3/pkg/identity"
+	"github.com/vmihailenco/msgpack/v5"
 )
 
 type EncryptedMessage struct {
@@ -24,12 +24,12 @@ type Message struct {
 }
 
 func Pack(m *Message) ([]byte, error) {
-	return json.Marshal(m)
+	return msgpack.Marshal(m)
 }
 
 func Unpack(packed []byte) (*Message, error) {
 	var m Message
-	err := json.Unmarshal(packed, &m)
+	err := msgpack.Unmarshal(packed, &m)
 	return &m, err
 }
 
@@ -38,6 +38,7 @@ func Encrypt(key, content, syncKey []byte, me, recipient *identity.User) (*Encry
 		derivedKey    []byte
 		payloadData   []byte
 		packedMessage []byte
+		err           error
 	)
 
 	defer func() {
@@ -115,6 +116,7 @@ func Decrypt(key []byte, encryptedMessage EncryptedMessage, syncKey []byte, me, 
 		packedMessage   []byte
 		unpackedMessage *Message
 		payloadData     []byte
+		err             error
 	)
 
 	defer func() {
