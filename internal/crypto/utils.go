@@ -65,6 +65,6 @@ func GenerateMessageInfo(idA, idB string) (string, error) {
 		second = idA
 	}
 
-	infoString := fmt.Sprintf("skid:v3:message:%s:%s", first, second)
+	infoString := fmt.Sprintf("skid:v4:message:%s:%s", first, second)
 	return infoString, nil
 }

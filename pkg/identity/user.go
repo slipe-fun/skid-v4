@@ -7,7 +7,7 @@ import (
 	"github.com/cloudflare/circl/kem/mlkem/mlkem768"
 	"github.com/cloudflare/circl/sign/ed448"
 	"github.com/mr-tron/base58/base58"
-	"github.com/slipe-fun/skid-v3/internal/crypto"
+	"github.com/slipe-fun/skid-v4/internal/crypto"
 	"github.com/vmihailenco/msgpack/v5"
 )
 
@@ -169,7 +169,7 @@ func EncryptSecretKeys(user *User, userSecretKeys *SecretKeys, masterKey []byte)
 		return nil, err
 	}
 
-	derivedKey, err = crypto.HKDF(masterKey, salt, "skid:v3:master_key", 32)
+	derivedKey, err = crypto.HKDF(masterKey, salt, "skid:v4:master_key", 32)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +238,7 @@ func DecryptSecretKeys(encryptedSecretKeys *EncryptedSecretKeys, user *User, mas
 		return nil, errors.New("invalid Ed448 signature")
 	}
 
-	derivedKey, err = crypto.HKDF(masterKey, encryptedSecretKeys.Salt, "skid:v3:master_key", 32)
+	derivedKey, err = crypto.HKDF(masterKey, encryptedSecretKeys.Salt, "skid:v4:master_key", 32)
 	if err != nil {
 		return nil, err
 	}

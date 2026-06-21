@@ -4,8 +4,8 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/slipe-fun/skid-v3/pkg/identity"
-	"github.com/slipe-fun/skid-v3/pkg/messages"
+	"github.com/slipe-fun/skid-v4/pkg/identity"
+	"github.com/slipe-fun/skid-v4/pkg/messages"
 	"github.com/tink-crypto/tink-go/v2/subtle/random"
 )
 

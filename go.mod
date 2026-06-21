@@ -1,4 +1,4 @@
-module github.com/slipe-fun/skid-v3
+module github.com/slipe-fun/skid-v4
 
 go 1.26.4
 

@@ -6,8 +6,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/slipe-fun/skid-v3/internal/crypto"
-	"github.com/slipe-fun/skid-v3/pkg/identity"
+	"github.com/slipe-fun/skid-v4/internal/crypto"
+	"github.com/slipe-fun/skid-v4/pkg/identity"
 	"github.com/vmihailenco/msgpack/v5"
 )
 

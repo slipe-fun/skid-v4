@@ -3,7 +3,7 @@ package identity
 import (
 	"errors"
 
-	"github.com/slipe-fun/skid-v3/internal/crypto"
+	"github.com/slipe-fun/skid-v4/internal/crypto"
 )
 
 type EncryptedMasterKey struct {
@@ -49,7 +49,7 @@ func EncryptMasterKey(masterKey []byte, recoveryKey []byte, user *User, userSecr
 		return nil, err
 	}
 
-	derivedKey, err = crypto.HKDF(recoveryKey, salt, "skid:v3:recovery_key", 32)
+	derivedKey, err = crypto.HKDF(recoveryKey, salt, "skid:v4:recovery_key", 32)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +143,7 @@ func DecryptMasterKey(encryptedMasterKey *EncryptedMasterKey, recoveryKey []byte
 		return nil, errors.New("invalid Ed448 signature")
 	}
 
-	derivedKey, err = crypto.HKDF(recoveryKey, encryptedMasterKey.Salt, "skid:v3:recovery_key", 32)
+	derivedKey, err = crypto.HKDF(recoveryKey, encryptedMasterKey.Salt, "skid:v4:recovery_key", 32)
 	if err != nil {
 		return nil, err
 	}
