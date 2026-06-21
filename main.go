@@ -38,6 +38,8 @@ func main() {
 	}
 	defer secretB.Wipe()
 
+	userARecoveryKey := random.GetRandomBytes(32)
+
 	userAMasterKey := random.GetRandomBytes(32)
 
 	userAPrefix := fmt.Sprintf("[User %s]", userA.ID)
@@ -48,8 +50,27 @@ func main() {
 
 	fmt.Println()
 
+	fmt.Println(userAPrefix, "Encrypting it's master key using recovery key...")
+	encryptedMasterKey, err := identity.EncryptMasterKey(userAMasterKey, userARecoveryKey, userA, secretA)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(userAPrefix, "Master key encrypted!")
+
+	fmt.Println()
+
+	fmt.Println(userAPrefix, "Decrypting master key...")
+	decryptedMasterKey, err := identity.DecryptMasterKey(encryptedMasterKey, userARecoveryKey, userA)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(userAPrefix, "Master key decrypted!")
+	fmt.Println(userAPrefix, "Decrypted master key:", hex.EncodeToString(decryptedMasterKey))
+
+	fmt.Println()
+
 	fmt.Println(userAPrefix, "Encrypting it's secret keys...")
-	encryptedSecretKeys, err := identity.Encrypt(userA, secretA, userAMasterKey)
+	encryptedSecretKeys, err := identity.EncryptSecretKeys(userA, secretA, userAMasterKey)
 	if err != nil {
 		panic(err)
 	}
@@ -58,7 +79,7 @@ func main() {
 	fmt.Println()
 
 	fmt.Println(userAPrefix, "Decrypting secret keys...")
-	decryptedSecretKeys, err := identity.Decrypt(encryptedSecretKeys, userA, userAMasterKey)
+	decryptedSecretKeys, err := identity.DecryptSecretKeys(encryptedSecretKeys, userA, userAMasterKey)
 	if err != nil {
 		panic(err)
 	}

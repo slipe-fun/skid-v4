@@ -3,6 +3,7 @@ package messages
 import (
 	"crypto/hmac"
 	"encoding/binary"
+	"errors"
 	"time"
 
 	"github.com/slipe-fun/skid-v3/internal/crypto"
@@ -34,6 +35,27 @@ func Unpack(packed []byte) (*Message, error) {
 }
 
 func Encrypt(key, content, syncKey []byte, me, recipient *identity.User) (*EncryptedMessage, error) {
+	if me == nil {
+		return nil, errors.New("sender (me) cannot be nil")
+	}
+	if recipient == nil {
+		return nil, errors.New("recipient cannot be nil")
+	}
+
+	if me.ID == "" {
+		return nil, errors.New("sender ID cannot be empty")
+	}
+	if recipient.ID == "" {
+		return nil, errors.New("recipient ID cannot be empty")
+	}
+
+	if len(key) == 0 {
+		return nil, errors.New("encryption key cannot be empty")
+	}
+	if len(syncKey) == 0 {
+		return nil, errors.New("sync key cannot be empty")
+	}
+
 	var (
 		derivedKey    []byte
 		payloadData   []byte
@@ -111,6 +133,36 @@ func Encrypt(key, content, syncKey []byte, me, recipient *identity.User) (*Encry
 }
 
 func Decrypt(key []byte, encryptedMessage EncryptedMessage, syncKey []byte, me, recipient *identity.User) (*Message, error) {
+	if me == nil {
+		return nil, errors.New("recipient (me) cannot be nil")
+	}
+	if recipient == nil {
+		return nil, errors.New("sender (recipient) cannot be nil")
+	}
+
+	if me.ID == "" {
+		return nil, errors.New("recipient ID cannot be empty")
+	}
+	if recipient.ID == "" {
+		return nil, errors.New("sender ID cannot be empty")
+	}
+
+	if len(key) == 0 {
+		return nil, errors.New("decryption key cannot be empty")
+	}
+	if len(syncKey) == 0 {
+		return nil, errors.New("sync key cannot be empty")
+	}
+	if len(encryptedMessage.Ciphertext) == 0 {
+		return nil, errors.New("ciphertext cannot be empty")
+	}
+	if len(encryptedMessage.Nonce) == 0 {
+		return nil, errors.New("nonce cannot be empty")
+	}
+	if len(encryptedMessage.Salt) == 0 {
+		return nil, errors.New("salt cannot be empty")
+	}
+
 	var (
 		derivedKey      []byte
 		packedMessage   []byte

@@ -147,7 +147,7 @@ func NewSecretKeys(kem, ecdh, ed []byte) (secret *SecretKeys, err error) {
 	return secret, nil
 }
 
-func Encrypt(user *User, userSecretKeys *SecretKeys, masterKey []byte) (*EncryptedSecretKeys, error) {
+func EncryptSecretKeys(user *User, userSecretKeys *SecretKeys, masterKey []byte) (*EncryptedSecretKeys, error) {
 	var (
 		packedSecretKeys []byte
 		derivedKey       []byte
@@ -207,7 +207,7 @@ func Encrypt(user *User, userSecretKeys *SecretKeys, masterKey []byte) (*Encrypt
 	}, nil
 }
 
-func Decrypt(encryptedSecretKeys *EncryptedSecretKeys, user *User, masterKey []byte) (*SecretKeys, error) {
+func DecryptSecretKeys(encryptedSecretKeys *EncryptedSecretKeys, user *User, masterKey []byte) (*SecretKeys, error) {
 	var (
 		derivedKey       []byte
 		packedSecretKeys []byte
